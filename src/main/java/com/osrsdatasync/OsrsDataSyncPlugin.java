@@ -225,6 +225,7 @@ public class OsrsDataSyncPlugin extends Plugin
 	private ClientToolbar clientToolbar;
 
 	private Storage storage;
+	private ItemStores stores;
 	private ExportPanel panel;
 	private NavigationButton navButton;
 	private static final DateTimeFormatter CLOCK = DateTimeFormatter.ofPattern("HH:mm");
@@ -271,6 +272,7 @@ public class OsrsDataSyncPlugin extends Plugin
 	protected void startUp()
 	{
 		storage = new Storage(this::getPluginDirectory, executor);
+		stores = new ItemStores(client, itemManager);
 		panel = new ExportPanel(this::export, this::copyFolderPath);
 		storage.setOnSaved(() ->
 		{
@@ -323,6 +325,7 @@ public class OsrsDataSyncPlugin extends Plugin
 		equipment = new ArrayList<>();
 		recentKills.clear();
 		pendingLoot.clear();
+		stores.reset();
 		ExportPanel p = panel;
 		SwingUtilities.invokeLater(() -> p.setPlayer(null));
 	}
@@ -361,6 +364,11 @@ public class OsrsDataSyncPlugin extends Plugin
 		{
 			return;
 		}
+		stores.onGameTick();
+		if (stores.takeChanged())
+		{
+			containersDirty = true;
+		}
 
 		if (questsDue)
 		{
@@ -398,6 +406,7 @@ public class OsrsDataSyncPlugin extends Plugin
 	public void onVarbitChanged(VarbitChanged event)
 	{
 		int varp = event.getVarpId();
+		stores.onVarChanged(varp, event.getVarbitId());
 		if (varp == VarPlayerID.QP)
 		{
 			questsDue = true;
@@ -436,6 +445,7 @@ public class OsrsDataSyncPlugin extends Plugin
 	public void onItemContainerChanged(ItemContainerChanged event)
 	{
 		int id = event.getContainerId();
+		stores.onItemContainerChanged(id, event.getItemContainer());
 		if (id == InventoryID.BANK)
 		{
 			bank = items(event.getItemContainer());
@@ -498,6 +508,7 @@ public class OsrsDataSyncPlugin extends Plugin
 			return;
 		}
 		String message = Text.removeTags(event.getMessage());
+		stores.onChatMessage(message);
 
 		Matcher kc = KILL_COUNT.matcher(message);
 		if (kc.find())
@@ -592,6 +603,7 @@ public class OsrsDataSyncPlugin extends Plugin
 	{
 		List<int[]> bank;
 		Long bankAt;
+		Map<String, ItemStores.Store> storage;
 	}
 
 	/** Reads the saved kill counts, collection log and bank, then merges them on the client thread. */
@@ -619,6 +631,10 @@ public class OsrsDataSyncPlugin extends Plugin
 			// Not opened yet this session: keep the bank from last time (and when it was seen)
 			bank = cont.bank;
 			bankAt = cont.bankAt == null ? 0 : cont.bankAt;
+		}
+		if (cont != null)
+		{
+			stores.restore(cont.storage); // stores not read again yet this session keep last time's copy
 		}
 		containersDirty = true;
 		if (kc != null && kc.killCounts != null)
@@ -889,6 +905,8 @@ public class OsrsDataSyncPlugin extends Plugin
 		data.put("equipment", equipment);
 		data.put("runePouch", runePouch());
 		data.put("ge", ge);
+		// Items inside other items and in other storage (ItemStores); a copy, as the JSON is made on the executor
+		data.put("storage", new TreeMap<>(stores.all()));
 		// bank / inventory / equipment lists are replaced (never changed in place) on each change, so they can be
 		// handed to the executor as they are
 		storage.writeJson(player, "containers.json", gson, data);

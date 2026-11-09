@@ -29,7 +29,7 @@ Files are written to `.runelite/plugin-data/osrsdatasync/<player name>/`:
 | `progress.json` | Quests, quest points, diary tiers and tasks, combat achievements, skills |
 | `killcounts.json` | Loot Tracker totals and official kill counts |
 | `clog.json` | Collection log items and counts |
-| `containers.json` | Bank, inventory, equipment, rune pouch, Grand Exchange offers |
+| `containers.json` | Bank, inventory, equipment, rune pouch, Grand Exchange offers, storage items and other storage |
 | `loot.jsonl` | One line per kill or reward |
 
 Each `.json` file starts with an `updated` time (ISO 8601, UTC). Files are written to a temporary file and then
@@ -82,8 +82,21 @@ After that, new items and drops of items already in the log are added as they ha
 | `inventory`, `equipment` | `[[item id, quantity, slot], ...]` |
 | `runePouch` | `[[item id, quantity], ...]` |
 | `ge` | `[{"slot", "state", "id", "total", "done", "price", "spent"}, ...]` for each active offer |
+| `storage` | `{"lootingBag": {"name", "how", "at", "items": [[item id, quantity], ...]}, ...}`, see below |
 
 Placeholders and bank fillers are skipped.
+
+`storage` holds items kept inside other items, and storage away from the bank. Each entry has a `name`, the time
+it was last read (`at`, milliseconds since 1970) and `how` it was read:
+
+| `how` | Meaning | Storage |
+| --- | --- | --- |
+| `live` | Always current while you are logged in | Bolt pouch, Dizana's quiver, essence pouches, Master scroll book, Plank sack, Tool leprechaun |
+| `open` | As of the last time you opened it | Looting bag, Seed box, Tackle box, Forestry kit, Huntsman's kit, Chugging barrel, Seed vault, Costume room (your house), Potion storage (whenever the bank is open) |
+| `check` | As of the last time you selected **Check** on it, or it was emptied | Coal bag, Gem bag, Herb sack, Log basket, Fish barrel |
+
+The game only reports `open` and `check` storage at those moments, so anything added or removed in between shows
+after the next open or Check. Potion storage is saved as whole potions (4-dose first).
 
 ### loot.jsonl
 
